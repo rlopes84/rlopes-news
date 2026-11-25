@@ -115,7 +115,9 @@
             body { font-size: 15px; }
             header { position: sticky; top: 0; }
             header > div { padding-left: 12px !important; padding-right: 12px !important; }
-            header > div > div:first-child { gap: 8px !important; padding-top: 10px !important; padding-bottom: 10px !important; }
+            header > div > div:first-child { gap: 8px !important; padding-top: 8px !important; padding-bottom: 8px !important; }
+            #mobile-category-row { display: flex !important; padding-top: 0 !important; padding-bottom: 8px !important; }
+            #category-nav:not(.mobile-nav-open) { padding: 0 !important; border: 0 !important; }
             header h1 { font-size: 1.2rem !important; line-height: 1.25 !important; }
             #live-clock { font-size: 9px !important; }
             header .order-2, header .order-3 { order: initial !important; }
@@ -126,15 +128,23 @@
             header .order-2 button:nth-of-type(3) { padding-left: 9px !important; padding-right: 9px !important; }
             header .order-2 > div { padding-left: 6px !important; margin-left: 0 !important; }
             header .order-2 img { width: 34px; height: 34px; }
+            /* Smartphone: keep category navigation collapsed so news gets the screen space. */
+            #mobile-category-toggle { display: flex !important; }
             #category-nav {
-                display: flex !important; flex-wrap: nowrap !important; overflow-x: auto !important;
-                overflow-y: hidden !important; white-space: nowrap; gap: 7px !important;
-                padding: 8px 0 12px !important; margin: 0 -2px;
-                -webkit-overflow-scrolling: touch; scrollbar-width: none;
-                scroll-snap-type: x proximity;
+                display: none !important;
+                position: absolute; left: 12px; right: 12px; top: calc(100% + 1px);
+                z-index: 45; flex-wrap: wrap !important; gap: 8px !important;
+                padding: 12px !important; margin: 0 !important;
+                max-height: min(58dvh, 420px); overflow-y: auto !important;
+                overflow-x: hidden !important; white-space: normal;
+                background: rgba(15, 23, 42, .98); border: 1px solid rgba(148,163,184,.22);
+                border-radius: 0 0 16px 16px; box-shadow: 0 16px 32px rgba(0,0,0,.32);
+                -webkit-overflow-scrolling: touch;
             }
-            #category-nav::-webkit-scrollbar { display: none; }
-            #category-nav > * { flex: 0 0 auto; scroll-snap-align: start; }
+            #category-nav.mobile-nav-open { display: flex !important; }
+            #category-nav > * { flex: 1 1 calc(50% - 8px); justify-content: flex-start; min-height: 42px; }
+            header { position: sticky; top: 0; }
+            header > div { position: relative; }
             main { padding: 16px 12px 24px !important; }
             main > div:first-child { align-items: flex-start !important; gap: 10px !important; }
             #active-category-title { font-size: 1rem !important; line-height: 1.35 !important; }
@@ -320,7 +330,15 @@
             </div>
 
             <!-- 12 VERTICALS CATEGORY FILTER BAR (ALL VISIBLE ON MAIN SCREEN) -->
-            <nav class="flex flex-wrap items-center gap-1.5 sm:gap-2 pb-3.5 pt-1" id="category-nav">
+            <div class="hidden items-center justify-between gap-3 py-2" id="mobile-category-row">
+                <button type="button" id="mobile-category-toggle" onclick="toggleMobileCategoryNav()" aria-expanded="false" aria-controls="category-nav" class="hidden items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-terminal-surface px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-100">
+                    <i class="fa-solid fa-bars" id="mobile-category-icon"></i>
+                    <span id="mobile-category-label">Todas as notícias</span>
+                    <i class="fa-solid fa-chevron-down text-[10px] ml-1" id="mobile-category-chevron"></i>
+                </button>
+                <span class="text-[10px] font-mono text-slate-500 dark:text-slate-400">NAVEGAR POR EDITORIAS</span>
+            </div>
+            <nav class="flex flex-wrap items-center gap-1.5 sm:gap-2 pb-3.5 pt-1" id="category-nav" aria-label="Categorias de notícias">
                 <!-- Populated dynamically via JS -->
             </nav>
         </div>
@@ -1081,6 +1099,13 @@
         document.addEventListener('DOMContentLoaded', () => {
             initMarketTicker();
             renderCategoryNav();
+            updateMobileCategoryLabel();
+            document.addEventListener('click', (event) => {
+                const nav = document.getElementById('category-nav');
+                const toggle = document.getElementById('mobile-category-toggle');
+                if (nav?.classList.contains('mobile-nav-open') && !nav.contains(event.target) && !toggle?.contains(event.target)) toggleMobileCategoryNav(false);
+            });
+            document.addEventListener('keydown', (event) => { if (event.key === 'Escape') toggleMobileCategoryNav(false); });
             updateBookmarkBadge();
             updateLiveClock();
             setInterval(updateLiveClock, 1000);
@@ -1135,6 +1160,26 @@
         /**
          * 7. CATEGORY NAVIGATION & FILTERING
          */
+        function toggleMobileCategoryNav(forceState) {
+            const nav = document.getElementById('category-nav');
+            const button = document.getElementById('mobile-category-toggle');
+            const isOpen = typeof forceState === 'boolean' ? forceState : !nav?.classList.contains('mobile-nav-open');
+            if (!nav || !button) return;
+            nav.classList.toggle('mobile-nav-open', isOpen);
+            button.setAttribute('aria-expanded', String(isOpen));
+            const icon = document.getElementById('mobile-category-icon');
+            const chevron = document.getElementById('mobile-category-chevron');
+            if (icon) icon.className = isOpen ? 'fa-solid fa-xmark' : 'fa-solid fa-bars';
+            if (chevron) chevron.className = isOpen ? 'fa-solid fa-chevron-up text-[10px] ml-1' : 'fa-solid fa-chevron-down text-[10px] ml-1';
+        }
+
+        function updateMobileCategoryLabel() {
+            const label = document.getElementById('mobile-category-label');
+            if (!label) return;
+            const active = CATEGORIES.find(cat => cat.id === state.activeCategory);
+            label.textContent = state.showOnlyBookmarks ? 'Itens salvos' : (active?.short || 'Todas as notícias');
+        }
+
         function renderCategoryNav() {
             const nav = document.getElementById('category-nav');
             if (!nav) return;
@@ -1155,6 +1200,7 @@
                     </button>
                 `;
             }).join('');
+            updateMobileCategoryLabel();
         }
 
         function selectCategory(categoryId) {
@@ -1162,6 +1208,7 @@
             state.showOnlyBookmarks = false;
             updateBookmarkButtonStyle();
             renderCategoryNav();
+            toggleMobileCategoryNav(false);
             renderNews();
         }
 
