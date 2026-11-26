@@ -1334,18 +1334,18 @@
                         </div>
 
                         <h3 onclick="openArticleModal('${item.id}')" class="cursor-pointer font-serif font-bold text-xl leading-snug text-slate-900 dark:text-white group-hover:text-emerald-500 transition-colors mb-2.5">
-                            ${item.title}
+                            ${escapeRlopesHtml(item.title)}
                         </h3>
 
                         <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 line-clamp-3 leading-relaxed mb-4">
-                            ${item.summary}
+                            ${escapeRlopesHtml(item.summary)}
                         </p>
                     </div>
 
                     <div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
-                        <span class="truncate max-w-[55%] font-semibold text-slate-700 dark:text-slate-300">${item.source}</span>
+                        <span class="truncate max-w-[55%] font-semibold text-slate-700 dark:text-slate-300">${escapeRlopesHtml(item.source)}</span>
                         <div class="flex items-center gap-3">
-                            <span>${item.time}</span>
+                            <span>${escapeRlopesHtml(item.time)}</span>
                             <button onclick="openArticleModal('${item.id}')" class="text-emerald-600 dark:text-emerald-400 font-bold hover:underline">
                                 Ler <i class="fa-solid fa-arrow-right ml-0.5"></i>
                             </button>
@@ -1376,11 +1376,11 @@
                         </div>
 
                         <h3 onclick="openArticleModal('${item.id}')" class="cursor-pointer font-bold text-base leading-snug text-slate-900 dark:text-white group-hover:text-emerald-500 transition-colors mb-2">
-                            ${item.title}
+                            ${escapeRlopesHtml(item.title)}
                         </h3>
 
                         <p class="text-xs text-slate-600 dark:text-slate-400 line-clamp-3 leading-relaxed mb-4">
-                            ${item.summary}
+                            ${escapeRlopesHtml(item.summary)}
                         </p>
                     </div>
 
@@ -1388,15 +1388,15 @@
                         <div class="flex flex-wrap gap-1.5 mb-3">
                             ${(item.tags || []).slice(0, 3).map(tag => `
                                 <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400">
-                                    #${tag}
+                                    #${escapeRlopesHtml(tag)}
                                 </span>
                             `).join('')}
                         </div>
 
                         <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                            <span class="truncate max-w-[55%]">${item.source}</span>
+                            <span class="truncate max-w-[55%]">${escapeRlopesHtml(item.source)}</span>
                             <div class="flex items-center gap-2.5">
-                                <span>${item.time}</span>
+                                <span>${escapeRlopesHtml(item.time)}</span>
                                 <button onclick="openArticleModal('${item.id}')" class="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline">
                                     Detalhes
                                 </button>
@@ -1552,21 +1552,26 @@
 
             const meta = getCategoryMeta(item.category);
             document.getElementById('modal-category').textContent = meta.label;
-            document.getElementById('modal-source').textContent = item.source;
+            document.getElementById('modal-source').textContent = item.sourceType ? `${item.source} · ${item.sourceType}` : item.source;
             document.getElementById('modal-time').textContent = item.time;
             document.getElementById('modal-impact').textContent = item.impact || 'Relevância Estratégica';
             document.getElementById('modal-title').textContent = item.title;
             document.getElementById('modal-insight').textContent = item.insight || item.summary;
-            document.getElementById('modal-external-link').href = item.url || '#';
+            const externalUrl = /^https?:\/\//i.test(item.url || '') ? item.url : '#';
+            const externalLink = document.getElementById('modal-external-link');
+            externalLink.href = externalUrl;
+            externalLink.target = '_blank';
+            externalLink.rel = 'noopener noreferrer';
+            externalLink.textContent = externalUrl === '#' ? 'Link indisponível' : 'Ler matéria original';
 
             document.getElementById('modal-tags').innerHTML = (item.tags || []).map(t => `
-                <span class="text-xs font-mono px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">#${t}</span>
+                <span class="text-xs font-mono px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">#${escapeRlopesHtml(t)}</span>
             `).join('');
 
             document.getElementById('modal-body').innerHTML = `
-                <p class="font-medium text-slate-800 dark:text-slate-200">${item.summary}</p>
-                <p>${item.body || ''}</p>
-            `;
+                <p class="font-medium text-slate-800 dark:text-slate-200">${escapeRlopesHtml(item.summary)}</p>
+                <p>${escapeRlopesHtml(item.body || '')}</p>
+            `
 
             const bmBtn = document.getElementById('modal-bookmark-btn');
             const isSaved = state.bookmarks.includes(item.id);
