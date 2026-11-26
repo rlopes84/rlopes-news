@@ -12,11 +12,30 @@ const FEEDS = [
   { category: 'empregos', query: 'vagas tecnologia OR empregos inovação OR carreira digital Brasil' }
 ];
 function decodeXml(value = '') {
-  return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]*>/g, ' ')
+  return String(value)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&#x([\da-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '‹').replace(/&gt;/g, '›').replace(/\s+/g, ' ').trim();
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+function cleanDescription(value = '') {
+  return decodeXml(value)
+    .replace(/\[([^\]]+)\]\((?:https?:\/\/)[^)]+\)/gi, '$1')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\s+/g, ' ').trim();
+}
+function classifySource(source = '') {
+  const name = source.toLowerCase();
+  if (/reuters|associated press|\bap news\b|afp/.test(name)) return 'Agência internacional';
+  if (/cnn|bbc|bloomberg|financial times|cnbc|the guardian/.test(name)) return 'Veículo internacional';
+  if (/agência brasil|valor econômico|estadao|estadão|folha|g1|exame|uol/.test(name)) return 'Veículo nacional';
+  if (/hacker news/.test(name)) return 'Comunidade de tecnologia';
+  return 'Fonte externa';
 }
 function tag(xml, name) {
   const match = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i'));
@@ -34,14 +53,14 @@ async function fetchFeed(feed) {
   const xml = await response.text();
   const items = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].slice(0, 12);
   return items.map(([, item]) => {
-    const title = tag(item, 'title'), link = tag(item, 'link'), description = tag(item, 'description');
+    const title = tag(item, 'title'), link = tag(item, 'link'), description = cleanDescription((item.match(/<description(?:\\s[^>]*)?>([\\s\\S]*?)<\\/description>/i) || [])[1] || '');
     const source = tag(item, 'source') || 'Google Notícias', pubDate = tag(item, 'pubDate');
     const timestamp = pubDate ? new Date(pubDate).getTime() : Date.now();
     if (!title || !link || !/^https?:\/\//i.test(link)) return null;
     return { id: stableId(link, title), category: feed.category, title,
       summary: description.slice(0, 420) || 'Acesse a matéria para consultar os detalhes na fonte original.',
       body: description || title, insight: 'Conteúdo publicado por fonte externa. Consulte a matéria original para contexto e atualização.',
-      source, time: Number.isFinite(timestamp) ? new Date(timestamp).toLocaleString('pt-BR') : 'Recente',
+      source, sourceType: classifySource(source), time: Number.isFinite(timestamp) ? new Date(timestamp).toLocaleString('pt-BR') : 'Recente',
       timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(), url: link,
       tags: [feed.category, 'Notícia externa'], isNew: Date.now() - timestamp < 10800000, isLive: true };
   }).filter(Boolean);
