@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="dark">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -185,9 +185,15 @@
             *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
         }
 
+        /* Rlopes News: light theme is the default */
+        html:not(.dark), html:not(.dark) body { background: #ffffff !important; color: #0f172a !important; }
+        html:not(.dark) body { color-scheme: light; }
+        html:not(.dark) main { background-color: #ffffff; }
+        html:not(.dark) .bg-slate-50 { background-color: #ffffff !important; }
+        html:not(.dark) .bg-white { background-color: #ffffff !important; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 dark:bg-terminal-bg dark:text-slate-100 transition-colors duration-200 min-h-screen flex flex-col selection:bg-emerald-500 selection:text-white">
+<body class="bg-white text-slate-900 dark:bg-terminal-bg dark:text-slate-100 transition-colors duration-200 min-h-screen flex flex-col selection:bg-emerald-500 selection:text-white">
 
     <!-- TOP LIVE MARKET & GLOBAL ALERT TICKER -->
     <div class="bg-slate-950 text-slate-200 border-b border-slate-800 text-xs font-mono overflow-hidden py-1.5 select-none">
@@ -259,7 +265,7 @@
                             <span id="live-indicator" class="live-dot relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                         </span>
                         <span class="hidden sm:inline">Auto-Sync</span>
-                        <span id="countdown-timer" class="font-mono font-semibold">30s</span>
+                        <span id="countdown-timer" class="font-mono font-semibold">5m</span>
                     </button>
 
                     <!-- Manual Refresh -->
@@ -991,8 +997,7 @@
             {
                 id: 'cur-17',
                 category: 'empregos',
-                title: 'Bancos, gestoras e indústrias abrem mais de 2.400 vagas híbridas e remotas para dados, produto e finanças',
-                summary: 'Programas de contratação de fim de ano buscam analistas quantitativos, Product Managers e especialistas em crédito estruturado.',
+                title: 'Bancos, gestoras e indústrias abrem mais de 2.400 vagas híbridas e remotas para dados, produto e finanças',                summary: 'Programas de contratação de fim de ano buscam analistas quantitativos, Product Managers e especialistas em crédito estruturado.',
                 body: 'Grandes instituições financeiras e empresas de energia aceleraram processos seletivos para iniciar janeiro de 2027 com squads completos focados em eficiência operacional e novos produtos digitais.',
                 insight: 'Posições que unem conhecimento de negócios/finanças com análise de dados (SQL, Python, IA) têm taxa de aprovação 3x maior.',
                 source: 'Radar Executivo & Vagas',
@@ -1087,7 +1092,7 @@
             bookmarks: JSON.parse(localStorage.getItem('rlopes_bookmarks') || '[]'),
             showOnlyBookmarks: false,
             autoUpdate: true,
-            countdown: 30,
+            countdown: 300,
             breakingIndex: 0
         };
 
@@ -1112,7 +1117,7 @@
 
             setupSearchListener();
             renderNews();
-            fetchHackerNewsLive();
+            fetchDynamicNews();
             startAutoSyncTimer();
         });
 
@@ -1405,52 +1410,44 @@
         /**
          * 9. LIVE HACKER NEWS API INTEGRATION
          */
-        async function fetchHackerNewsLive() {
+        let dynamicNewsLoading = false;
+
+        async function fetchDynamicNews() {
+            if (dynamicNewsLoading) return;
+            dynamicNewsLoading = true;
             const statusEl = document.getElementById('hn-status');
             try {
-                const res = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
-                if (!res.ok) throw new Error('HN API indisponível');
-                const ids = await res.json();
-                const topIds = ids.slice(0, 5);
+                const response = await fetch('/api/news', { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
+                if (!response.ok) throw new Error(`Falha ao consultar notícias (${response.status})`);
+                const payload = await response.json();
+                const liveItems = Array.isArray(payload.items) ? payload.items : [];
+                if (!liveItems.length) throw new Error('Nenhuma notícia externa retornada');
 
-                const stories = await Promise.all(
-                    topIds.map(id =>
-                        fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(r => r.json())
-                    )
-                );
-
-                const validStories = stories.filter(s => s && s.title);
-                if (validStories.length > 0) {
-                    const mapped = validStories.map((s, idx) => ({
-                        id: `hn-${s.id}`,
-                        category: 'hackernews',
-                        title: s.title,
-                        summary: `Discussão em alta na comunidade global Hacker News com ${s.score || 0} pontos e ${s.descendants || 0} comentários técnicos.`,
-                        body: `Tópico técnico em tempo real capturado diretamente do feed principal do Hacker News (Y Combinator). Autor: ${s.by || 'comunidade'}. Engajamento atual: ${s.score || 0} upvotes.`,
-                        insight: 'Sinal antecipado de tendências em engenharia de software, agentes de IA, infraestrutura e segurança cibernética.',
-                        source: 'Hacker News Live API',
-                        time: 'Ao vivo',
-                        timestamp: Date.now() - idx * 60000,
-                        impact: `${s.score || 0} pts HN`,
-                        tags: ['HackerNews', 'TechGlobal', 'LiveFeed'],
-                        url: s.url || `https://news.ycombinator.com/item?id=${s.id}`
-                    }));
-
-                    state.news = [
-                        ...mapped,
-                        ...state.news.filter(n => !String(n.id).startsWith('hn-'))
-                    ];
-                    if (statusEl) {
-                        statusEl.textContent = 'Conectado';
-                        statusEl.className = 'text-emerald-500';
-                    }
-                    renderNews();
-                }
-            } catch (err) {
+                const normalized = liveItems.map(item => ({
+                    ...item,
+                    isLive: true,
+                    time: item.timestamp ? new Date(item.timestamp).toLocaleString('pt-BR') : (item.time || 'Recente'),
+                    tags: Array.isArray(item.tags) ? item.tags : []
+                }));
+                const curated = state.news.filter(item => !item.isLive && !String(item.id).startsWith('hn-'));
+                const merged = new Map();
+                [...normalized, ...curated].forEach(item => { if (!merged.has(item.id)) merged.set(item.id, item); });
+                state.news = [...merged.values()].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                 if (statusEl) {
-                    statusEl.textContent = 'Modo Curado';
-                    statusEl.className = 'text-amber-400';
+                    statusEl.textContent = `Ao vivo · ${normalized.length} notícias`;
+                    statusEl.className = 'text-emerald-600';
                 }
+                const lastEl = document.getElementById('last-updated-text');
+                if (lastEl) lastEl.textContent = 'Atualizado às ' + new Date(payload.updatedAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                renderNews();
+            } catch (error) {
+                if (statusEl) {
+                    statusEl.textContent = 'Fonte temporariamente indisponível';
+                    statusEl.className = 'text-amber-600';
+                }
+                console.error('Rlopes News — atualização dinâmica:', error);
+            } finally {
+                dynamicNewsLoading = false;
             }
         }
 
@@ -1463,12 +1460,11 @@
                 if (!state.autoUpdate) return;
                 state.countdown -= 1;
                 const timerEl = document.getElementById('countdown-timer');
-                if (timerEl) timerEl.textContent = `${state.countdown}s`;
+                if (timerEl) timerEl.textContent = state.countdown >= 60 ? `${Math.ceil(state.countdown / 60)}m` : `${state.countdown}s`;
 
                 if (state.countdown <= 0) {
-                    state.countdown = 30;
-                    injectBreakingDispatch();
-                    fetchHackerNewsLive();
+                    state.countdown = 300;
+                    fetchDynamicNews();
                 }
             }, 1000);
         }
@@ -1482,7 +1478,7 @@
             if (state.autoUpdate) {
                 btn.className = 'flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all';
                 indicator.className = 'live-dot relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500';
-                timerEl.textContent = `${state.countdown}s`;
+                timerEl.textContent = state.countdown >= 60 ? `${Math.ceil(state.countdown / 60)}m` : `${state.countdown}s`;
                 showToast('Auto-Sync ativado: monitoramento em tempo real ativo.', 'success');
             } else {
                 btn.className = 'flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-slate-100 dark:bg-terminal-surface text-slate-500 border border-slate-200 dark:border-slate-700 transition-all';
@@ -1495,35 +1491,10 @@
         function triggerManualRefresh() {
             const icon = document.getElementById('refresh-icon');
             if (icon) icon.classList.add('fa-spin');
-            state.countdown = 30;
-
-            fetchHackerNewsLive().finally(() => {
-                injectBreakingDispatch();
-                const lastEl = document.getElementById('last-updated-text');
-                if (lastEl) {
-                    lastEl.textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                }
-                setTimeout(() => {
-                    if (icon) icon.classList.remove('fa-spin');
-                }, 600);
+            state.countdown = 300;
+            fetchDynamicNews().finally(() => {
+                setTimeout(() => { if (icon) icon.classList.remove('fa-spin'); }, 600);
             });
-        }
-
-        function injectBreakingDispatch() {
-            const template = LIVE_BREAKING_POOL[state.breakingIndex % LIVE_BREAKING_POOL.length];
-            state.breakingIndex += 1;
-
-            const newItem = {
-                ...template,
-                id: `live-${Date.now()}`,
-                time: 'Agora mesmo',
-                timestamp: Date.now(),
-                isNew: true
-            };
-
-            state.news.unshift(newItem);
-            renderNews();
-            showToast(`Nova atualização: ${newItem.title.slice(0, 68)}...`, 'breaking');
         }
 
         /**
