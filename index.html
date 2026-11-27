@@ -1736,14 +1736,12 @@
             }
             return text
                 .replace(/<[^>]*>/g, ' ')
-                .replace(/&(?:nbsp|#160|#x0*a0);?/gi, ' ')
-                .replace(/&#x0*20;?/gi, ' ')
-                .replace(/\\*\\*/g, '')
+                .replace(/\*\*/g, '')
                 .replace(/__([^_]+)__/g, '$1')
-                .replace(/(^|\\s)#[a-z0-9_-]+#/gi, '$1')
-                .replace(/[\\u00a0\\u2007\\u202f]/g, ' ')
-                .replace(/[ \\t]+/g, ' ')
-                .replace(/\\s+([,.;:!?])/g, '$1')
+                .replace(/(^|\s)#[a-z0-9_-]+#/gi, '$1')
+                .replace(/[\u00a0\u2007\u202f]/g, ' ')
+                .replace(/[ \t]+/g, ' ')
+                .replace(/\s+([,.;:!?])/g, '$1')
                 .trim();
         }
 
