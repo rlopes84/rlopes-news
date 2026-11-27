@@ -1,0 +1,27 @@
+name: Refresh Rlopes News
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-news
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Request fresh news collection
+        run: |
+          curl --fail --silent --show-error \
+            --retry 2 --retry-delay 5 \
+            --max-time 90 \
+            "https://rlopes-news.vercel.app/api/news?refresh=1" \
+            --output response.json
+          cat response.json

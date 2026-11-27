@@ -1,99 +1,249 @@
-const FEEDS = [
-  { category: 'mercado', query: 'economia circular sustentabilidade OR economia brasileira mercado negócios' },
-  { category: 'financas', query: 'finanças OR consórcios OR crédito OR renda fixa Brasil' },
-  { category: 'cripto', query: 'Bitcoin OR criptomoedas OR blockchain mercado' },
-  { category: 'tecnologia', query: 'tecnologia inovação transformação digital empresas' },
-  { category: 'agronews', query: 'agronegócio OR agricultura digital OR AgTech Brasil' },
-  { category: 'ia', query: 'inteligência artificial OR IA generativa OR agentes de IA' },
-  { category: 'hackernews', query: 'cibersegurança OR segurança da informação OR tecnologia hacker' },
-  { category: 'startups', query: 'startups OR venture capital OR inovação empreendedorismo' },
-  { category: 'empreendedorismo', query: 'empreendedorismo OR pequenas empresas OR novos negócios' },
-  { category: 'oportunidades', query: 'negócios B2B OR oportunidades empresariais OR mercado corporativo' },
-  { category: 'empregos', query: 'vagas tecnologia OR empregos inovação OR carreira digital Brasil' }
+const MAX_AGE_MS = 48 * 60 * 60 * 1000;
+const FUTURE_TOLERANCE_MS = 10 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 6000;
+const MAX_ITEMS_PER_FEED = 18;
+
+const DIRECT_FEEDS = [
+  { category: 'mercado', name: 'Agência Brasil', url: 'https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml' },
+  { category: 'mercado', name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
+  { category: 'tecnologia', name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml' },
+  { category: 'tecnologia', name: 'TechCrunch', url: 'https://techcrunch.com/feed/' },
+  { category: 'tecnologia', name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
+  { category: 'tecnologia', name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
+  { category: 'cripto', name: 'CoinDesk', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/' },
+  { category: 'cripto', name: 'Cointelegraph', url: 'https://cointelegraph.com/rss' },
+  { category: 'hackernews', name: 'Hacker News', url: 'https://news.ycombinator.com/rss' }
 ];
+
+const GOOGLE_NEWS_FEEDS = [
+  { category: 'mercado', query: '(economia OR negócios OR sustentabilidade OR "economia circular" OR mercado) when:2d' },
+  { category: 'financas', query: '(finanças OR consórcios OR crédito OR investimentos OR "renda fixa") when:2d' },
+  { category: 'cripto', query: '(Bitcoin OR criptomoedas OR blockchain OR criptoativos) when:2d' },
+  { category: 'tecnologia', query: '(tecnologia OR inovação OR transformação digital OR cibersegurança) when:2d' },
+  { category: 'agronews', query: '(agronegócio OR agricultura OR AgTech OR agroindústria OR commodities) when:2d' },
+  { category: 'ia', query: '("inteligência artificial" OR "IA generativa" OR "agentes de IA") when:2d' },
+  { category: 'startups', query: '(startups OR "venture capital" OR empreendedorismo OR inovação) when:2d' },
+  { category: 'empreendedorismo', query: '("pequenas empresas" OR empreendedorismo OR negócios) when:2d' },
+  { category: 'oportunidades', query: '("mercado corporativo" OR oportunidades empresariais OR negócios B2B) when:2d' },
+  { category: 'empregos', query: '(vagas tecnologia OR empregos inovação OR carreira digital) when:2d' },
+  { category: 'hackernews', query: '(cibersegurança OR "segurança da informação" OR engenharia de software) when:2d' }
+];
+
 function decodeXml(value = '') {
   return String(value)
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&#x([\da-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+}
+
+function cleanText(value = '') {
+  return decodeXml(value)
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ').trim();
-}
-function cleanDescription(value = '') {
-  return decodeXml(value)
-    .replace(/\[([^\]]+)\]\((?:https?:\/\/)[^)]+\)/gi, '$1')
     .replace(/https?:\/\/\S+/gi, '')
-    .replace(/\s+/g, ' ').trim();
+    .replace(/\s+/g, ' ')
+    .trim();
 }
-function classifySource(source = '') {
-  const name = source.toLowerCase();
-  if (/reuters|associated press|\bap news\b|afp/.test(name)) return 'Agência internacional';
-  if (/cnn|bbc|bloomberg|financial times|cnbc|the guardian/.test(name)) return 'Veículo internacional';
-  if (/agência brasil|valor econômico|estadao|estadão|folha|g1|exame|uol/.test(name)) return 'Veículo nacional';
-  if (/hacker news/.test(name)) return 'Comunidade de tecnologia';
-  return 'Fonte externa';
+
+function readTag(xml, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = xml.match(new RegExp('<' + escaped + '(?:\\s[^>]*)?>([\\s\\S]*?)<\\/' + escaped + '>', 'i'));
+  return match ? match[1].trim() : '';
 }
-function tag(xml, name) {
-  const match = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i'));
-  return match ? decodeXml(match[1]) : '';
+
+function readAtomLink(xml) {
+  const links = [...xml.matchAll(/<link\b([^>]*)\/?\s*>/gi)];
+  for (const match of links) {
+    const attrs = match[1];
+    const rel = (attrs.match(/\brel=["']([^"']+)["']/i) || [])[1] || 'alternate';
+    const href = (attrs.match(/\bhref=["']([^"']+)["']/i) || [])[1];
+    if (href && (rel === 'alternate' || rel === '')) return decodeXml(href);
+  }
+  return '';
 }
+
+function parseEntries(xml) {
+  const rss = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map(match => match[1]);
+  if (rss.length) return rss;
+  return [...xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/gi)].map(match => match[1]);
+}
+
+function parseTimestamp(item) {
+  const raw = readTag(item, 'pubDate') || readTag(item, 'published') ||
+    readTag(item, 'updated') || readTag(item, 'dc:date');
+  if (!raw) return null;
+  const timestamp = Date.parse(decodeXml(raw).replace(/<[^>]+>/g, '').trim());
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function canonicalUrl(value = '') {
+  const url = decodeXml(value).trim();
+  if (!(url.startsWith('http://') || url.startsWith('https://'))) return '';
+  return url
+    .replace(/#.*$/, '')
+    .replace(/([?&])(?:utm_[^=&]+|fbclid|gclid)=[^&]*/gi, '$1')
+    .replace(/[?&]$/, '');
+}
+
 function stableId(url, title) {
   let hash = 2166136261;
-  for (const ch of (url || title)) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619);
-  return `feed-${(hash >>> 0).toString(36)}`;
+  for (const ch of (url || title).toLowerCase()) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619);
+  return 'news-' + (hash >>> 0).toString(36);
 }
-async function fetchFeed(feed) {
-  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(feed.query)}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
-  const response = await fetch(url, { headers: { 'User-Agent': 'RlopesNews/1.0 (+https://github.com/rlopes84/rlopes)', 'Accept': 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(9000) });
-  if (!response.ok) throw new Error(`Feed ${feed.category}: HTTP ${response.status}`);
+
+function classifySource(source = '') {
+  const name = source.toLowerCase();
+  if (/reuters|associated press|\\bap news\\b|afp/.test(name)) return 'Agência internacional';
+  if (/cnn|bbc|bloomberg|financial times|cnbc|the guardian|al jazeera|france 24|deutsche welle/.test(name)) return 'Veículo internacional';
+  if (/agência brasil|valor econômico|estadao|estadão|folha|g1|exame|uol|infomoney/.test(name)) return 'Veículo nacional';
+  if (/techcrunch|the verge|ars technica|coindesk|cointelegraph/.test(name)) return 'Veículo especializado';
+  if (/hacker news/.test(name)) return 'Comunidade de tecnologia';
+  if (/google notícias/.test(name)) return 'Agregador de notícias';
+  return 'Fonte externa';
+}
+
+function mapFeedEntry(item, feed, now) {
+  const title = cleanText(readTag(item, 'title'));
+  const rawLink = readTag(item, 'link') || readAtomLink(item) || readTag(item, 'guid');
+  const url = canonicalUrl(rawLink);
+  const timestamp = parseTimestamp(item);
+  if (!title || !url || timestamp === null) return null;
+  const age = now - timestamp;
+  if (age < -FUTURE_TOLERANCE_MS || age > MAX_AGE_MS) return null;
+
+  const sourceFromFeed = cleanText(readTag(item, 'source'));
+  const source = sourceFromFeed || feed.name;
+  const description = cleanText(readTag(item, 'description') || readTag(item, 'summary') || readTag(item, 'content:encoded'));
+  return {
+    id: stableId(url, title),
+    category: feed.category,
+    title,
+    summary: (description || 'Acesse a publicação original para consultar os detalhes.') .slice(0, 420),
+    body: description || title,
+    insight: 'Notícia recente publicada pela fonte original. Consulte o link para contexto e informações completas.',
+    source,
+    sourceType: classifySource(source),
+    time: new Date(timestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+    timestamp,
+    url,
+    tags: [feed.category, 'Notícia recente'],
+    isNew: age <= 3 * 60 * 60 * 1000,
+    isLive: true
+  };
+}
+
+async function fetchOneFeed(feed, now) {
+  const response = await fetch(feed.url, {
+    headers: {
+      'User-Agent': 'RlopesNews/2.0 (+https://rlopes-news.vercel.app)',
+      'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.8'
+    },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  });
+  if (!response.ok) throw new Error('HTTP ' + response.status);
   const xml = await response.text();
-  const items = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].slice(0, 12);
-  return items.map(([, item]) => {
-    const title = tag(item, 'title'), link = tag(item, 'link'), description = cleanDescription((item.match(/<description(?:\\s[^>]*)?>([\\s\\S]*?)<\\/description>/i) || [])[1] || '');
-    const source = tag(item, 'source') || 'Google Notícias', pubDate = tag(item, 'pubDate');
-    const timestamp = pubDate ? new Date(pubDate).getTime() : Date.now();
-    if (!title || !link || !/^https?:\/\//i.test(link)) return null;
-    return { id: stableId(link, title), category: feed.category, title,
-      summary: description.slice(0, 420) || 'Acesse a matéria para consultar os detalhes na fonte original.',
-      body: description || title, insight: 'Conteúdo publicado por fonte externa. Consulte a matéria original para contexto e atualização.',
-      source, sourceType: classifySource(source), time: Number.isFinite(timestamp) ? new Date(timestamp).toLocaleString('pt-BR') : 'Recente',
-      timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(), url: link,
-      tags: [feed.category, 'Notícia externa'], isNew: Date.now() - timestamp < 10800000, isLive: true };
+  const entries = parseEntries(xml).slice(0, MAX_ITEMS_PER_FEED);
+  return entries.map(item => mapFeedEntry(item, feed, now)).filter(Boolean);
+}
+
+function googleNewsUrl(query) {
+  return 'https://news.google.com/rss/search?q=' + encodeURIComponent(query) +
+    '&hl=pt-BR&gl=BR&ceid=BR:pt-419';
+}
+
+async function fetchGoogleFeed(feed, now) {
+  return fetchOneFeed({
+    ...feed,
+    name: 'Google Notícias',
+    url: googleNewsUrl(feed.query)
+  }, now);
+}
+
+async function fetchHackerNews(now) {
+  const response = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json', {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  });
+  if (!response.ok) throw new Error('Hacker News HTTP ' + response.status);
+  const ids = (await response.json()).slice(0, 20);
+  const stories = await Promise.all(ids.map(async id => {
+    try {
+      const result = await fetch('https://hacker-news.firebaseio.com/v0/item/' + id + '.json', {
+        signal: AbortSignal.timeout(3000)
+      });
+      return result.ok ? result.json() : null;
+    } catch {
+      return null;
+    }
+  }));
+  return stories.filter(story => story && story.title && story.time).map(story => {
+    const timestamp = story.time * 1000;
+    const age = now - timestamp;
+    if (age < -FUTURE_TOLERANCE_MS || age > MAX_AGE_MS) return null;
+    const url = canonicalUrl(story.url || ('https://news.ycombinator.com/item?id=' + story.id));
+    return {
+      id: 'hn-' + story.id,
+      category: 'hackernews',
+      title: cleanText(story.title),
+      summary: 'Discussão no Hacker News: ' + (story.score || 0) + ' pontos e ' + (story.descendants || 0) + ' comentários.',
+      body: 'Tópico publicado por ' + (story.by || 'comunidade Hacker News') + '. Consulte a discussão original.',
+      insight: 'Sinal de tendência em tecnologia, engenharia, IA ou segurança.',
+      source: 'Hacker News',
+      sourceType: 'Comunidade de tecnologia',
+      time: new Date(timestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      timestamp,
+      url,
+      tags: ['Hacker News', 'Tecnologia'],
+      isNew: age <= 3 * 60 * 60 * 1000,
+      isLive: true
+    };
   }).filter(Boolean);
 }
-async function fetchHackerNews() {
-  const response = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json', { signal: AbortSignal.timeout(7000) });
-  if (!response.ok) throw new Error('Hacker News indisponível');
-  const ids = (await response.json()).slice(0, 12);
-  const stories = await Promise.all(ids.map(async id => {
-    try { const r = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, { signal: AbortSignal.timeout(5000) }); return r.ok ? r.json() : null; }
-    catch { return null; }
-  }));
-  return stories.filter(s => s && s.title).map(s => ({
-    id: `hn-${s.id}`, category: 'hackernews', title: s.title,
-    summary: `Discussão em alta no Hacker News: ${s.score || 0} pontos e ${s.descendants || 0} comentários.`,
-    body: `Tópico publicado por ${s.by || 'comunidade Hacker News'}. Consulte a discussão original.`,
-    insight: 'Sinal de tendência em tecnologia, engenharia, IA ou segurança.', source: 'Hacker News',
-    time: new Date((s.time || Date.now() / 1000) * 1000).toLocaleString('pt-BR'),
-    timestamp: (s.time || Date.now() / 1000) * 1000,
-    url: s.url || `https://news.ycombinator.com/item?id=${s.id}`, tags: ['Hacker News', 'Tecnologia'],
-    isNew: Date.now() - (s.time || 0) * 1000 < 10800000, isLive: true
-  }));
-}
+
 module.exports = async function handler(req, res) {
-  res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+  const forceRefresh = req.query && req.query.refresh === '1';
+  res.setHeader('Cache-Control', forceRefresh ? 'no-store, max-age=0' : 'public, s-maxage=60, stale-while-revalidate=120');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Método não permitido' });
-  const results = await Promise.allSettled([...FEEDS.map(fetchFeed), fetchHackerNews()]);
-  const items = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+
+  const now = Date.now();
+  const jobs = [
+    ...DIRECT_FEEDS.map(feed => ({ name: feed.name, category: feed.category, run: () => fetchOneFeed(feed, now) })),
+    ...GOOGLE_NEWS_FEEDS.map(feed => ({ name: 'Google Notícias', category: feed.category, run: () => fetchGoogleFeed(feed, now) })),
+    { name: 'Hacker News API', category: 'hackernews', run: () => fetchHackerNews(now) }
+  ];
+
+  const results = await Promise.allSettled(jobs.map(job => job.run()));
+  const items = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
   const unique = new Map();
-  for (const item of items) if (!unique.has(item.id)) unique.set(item.id, item);
-  const sorted = [...unique.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, 120);
-  return res.status(200).json({ updatedAt: new Date().toISOString(), count: sorted.length,
-    failedFeeds: results.filter(r => r.status === 'rejected').length,
-    sources: ['Google Notícias RSS', 'Hacker News API'], items: sorted });
+  for (const item of items) {
+    const existing = unique.get(item.id);
+    if (!existing || item.timestamp > existing.timestamp) unique.set(item.id, item);
+  }
+
+  const sorted = [...unique.values()]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 160);
+  const successfulFeeds = results.filter(result => result.status === 'fulfilled').length;
+  const failedFeeds = jobs.length - successfulFeeds;
+  const sourceNames = [...new Set(sorted.map(item => item.source))];
+
+  return res.status(200).json({
+    updatedAt: new Date(now).toISOString(),
+    freshnessWindowHours: 48,
+    count: sorted.length,
+    successfulFeeds,
+    failedFeeds,
+    feedChecks: jobs.map((job, index) => ({
+      source: job.name,
+      category: job.category,
+      status: results[index].status === 'fulfilled' ? 'ok' : 'error'
+    })),
+    sources: sourceNames,
+    items: sorted
+  });
 };
