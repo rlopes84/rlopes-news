@@ -81,16 +81,12 @@ function parseTimestamp(item) {
 }
 
 function canonicalUrl(value = '') {
-  try {
-    const url = new URL(decodeXml(value));
-    url.hash = '';
-    for (const key of [...url.searchParams.keys()]) {
-      if (/^(utm_|fbclid|gclid)/i.test(key)) url.searchParams.delete(key);
-    }
-    return url.toString();
-  } catch {
-    return '';
-  }
+  const url = decodeXml(value).trim();
+  if (!/^https?:\\/\\//i.test(url)) return '';
+  return url
+    .replace(/#.*$/, '')
+    .replace(/([?&])(?:utm_[^=&]+|fbclid|gclid)=[^&]*/gi, '$1')
+    .replace(/[?&]$/, '');
 }
 
 function stableId(url, title) {
