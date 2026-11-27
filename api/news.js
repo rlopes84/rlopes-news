@@ -1,6 +1,6 @@
 const MAX_AGE_MS = 48 * 60 * 60 * 1000;
 const FUTURE_TOLERANCE_MS = 10 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 8000;
+const REQUEST_TIMEOUT_MS = 6000;
 const MAX_ITEMS_PER_FEED = 18;
 
 const DIRECT_FEEDS = [
@@ -174,7 +174,7 @@ async function fetchHackerNews(now) {
   const stories = await Promise.all(ids.map(async id => {
     try {
       const result = await fetch('https://hacker-news.firebaseio.com/v0/item/' + id + '.json', {
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(3000)
       });
       return result.ok ? result.json() : null;
     } catch {
