@@ -119,6 +119,71 @@ function stableId(url, title) {
   return 'news-' + (hash >>> 0).toString(36);
 }
 
+
+function normalizeTitle(value = '') {
+  return cleanText(value)
+    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\\b(live|ao vivo|ultimas noticias|ultima hora|breaking)\\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\\s+/)
+    .filter(token => token.length > 2 && !new Set([
+      'com', 'para', 'por', 'uma', 'uns', 'das', 'dos', 'que', 'como',
+      'sobre', 'apos', 'entre', 'mais', 'menos', 'seu', 'sua', 'the',
+      'and', 'for', 'from', 'with', 'this', 'that'
+    ]).has(token));
+}
+
+function titleSimilarity(left, right) {
+  const a = new Set(normalizeTitle(left));
+  const b = new Set(normalizeTitle(right));
+  if (a.size < 4 || b.size < 4) return false;
+  let intersection = 0;
+  for (const token of a) if (b.has(token)) intersection++;
+  const overlap = intersection / Math.min(a.size, b.size);
+  const jaccard = intersection / (a.size + b.size - intersection);
+  return overlap >= 0.9 || jaccard >= 0.78;
+}
+
+function deduplicateNews(items) {
+  const kept = [];
+  const exactUrls = new Set();
+  const duplicateIds = new Set();
+
+  for (const item of [...items].sort((a, b) => b.timestamp - a.timestamp)) {
+    const normalizedUrl = canonicalUrl(item.url).toLowerCase()
+      .replace(/^https?:\\/\\//, '')
+      .replace(/^www\\./, '')
+      .replace(/\\/$/, '');
+    const normalizedTitle = normalizeTitle(item.title).join(' ');
+    const exactKey = normalizedUrl || normalizedTitle;
+
+    if (exactUrls.has(exactKey)) {
+      duplicateIds.add(item.id);
+      continue;
+    }
+
+    const duplicate = kept.find(existing =>
+      titleSimilarity(existing.title, item.title)
+    );
+    if (duplicate) {
+      duplicateIds.add(item.id);
+      // Preserve the original editorial placement and the best available source.
+      // Prefer a direct publisher/institution over Google News when titles match.
+      if (duplicate.source === 'Google Notícias' && item.source !== 'Google Notícias') {
+        Object.assign(duplicate, item);
+      }
+      continue;
+    }
+
+    exactUrls.add(exactKey);
+    kept.push(item);
+  }
+
+  return { items: kept, duplicatesRemoved: duplicateIds.size };
+}
+
 function classifySource(source = '') {
   const name = source.toLowerCase();
   if (/reuters|associated press|\\bap news\\b|afp/.test(name)) return 'Agência internacional';
@@ -244,15 +309,8 @@ module.exports = async function handler(req, res) {
 
   const results = await Promise.allSettled(jobs.map(job => job.run()));
   const items = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
-  const unique = new Map();
-  for (const item of items) {
-    const existing = unique.get(item.id);
-    if (!existing || item.timestamp > existing.timestamp) unique.set(item.id, item);
-  }
-
-  const sorted = [...unique.values()]
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 200);
+  const deduplicated = deduplicateNews(items);
+  const sorted = deduplicated.items.slice(0, 200);
   const successfulFeeds = results.filter(result => result.status === 'fulfilled').length;
   const failedFeeds = jobs.length - successfulFeeds;
   const sourceNames = [...new Set(sorted.map(item => item.source))];
@@ -261,6 +319,7 @@ module.exports = async function handler(req, res) {
     updatedAt: new Date(now).toISOString(),
     freshnessWindowHours: 48,
     count: sorted.length,
+    duplicatesRemoved: deduplicated.duplicatesRemoved,
     successfulFeeds,
     failedFeeds,
     feedChecks: jobs.map((job, index) => ({
