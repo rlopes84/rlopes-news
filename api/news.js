@@ -122,12 +122,12 @@ function stableId(url, title) {
 
 function normalizeTitle(value = '') {
   return cleanText(value)
-    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/\\b(live|ao vivo|ultimas noticias|ultima hora|breaking)\\b/g, ' ')
+    .replace(/\b(live|ao vivo|ultimas noticias|ultima hora|breaking)\b/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
-    .split(/\\s+/)
+    .split(/\s+/)
     .filter(token => token.length > 2 && !new Set([
       'com', 'para', 'por', 'uma', 'uns', 'das', 'dos', 'que', 'como',
       'sobre', 'apos', 'entre', 'mais', 'menos', 'seu', 'sua', 'the',
@@ -153,9 +153,9 @@ function deduplicateNews(items) {
 
   for (const item of [...items].sort((a, b) => b.timestamp - a.timestamp)) {
     const normalizedUrl = canonicalUrl(item.url).toLowerCase()
-      .replace(/^https?:\\/\\//, '')
-      .replace(/^www\\./, '')
-      .replace(/\\/$/, '');
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/\/$/, '');
     const normalizedTitle = normalizeTitle(item.title).join(' ');
     const exactKey = normalizedUrl || normalizedTitle;
 
@@ -169,8 +169,6 @@ function deduplicateNews(items) {
     );
     if (duplicate) {
       duplicateIds.add(item.id);
-      // Preserve the original editorial placement and the best available source.
-      // Prefer a direct publisher/institution over Google News when titles match.
       if (duplicate.source === 'Google Notícias' && item.source !== 'Google Notícias') {
         Object.assign(duplicate, item);
       }
