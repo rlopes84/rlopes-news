@@ -97,8 +97,10 @@ function stableId(url, title) {
 
 function classifySource(source = '') {
   const name = source.toLowerCase();
-  if (/agência brasil|bbc|techcrunch|the verge|ars technica|coindesk|cointelegraph/.test(name)) return 'Veículo jornalístico';
-  if (/reuters|associated press|\bap news\b|afp/.test(name)) return 'Agência internacional';
+  if (/reuters|associated press|\\bap news\\b|afp/.test(name)) return 'Agência internacional';
+  if (/cnn|bbc|bloomberg|financial times|cnbc|the guardian|al jazeera|france 24|deutsche welle/.test(name)) return 'Veículo internacional';
+  if (/agência brasil|valor econômico|estadao|estadão|folha|g1|exame|uol|infomoney/.test(name)) return 'Veículo nacional';
+  if (/techcrunch|the verge|ars technica|coindesk|cointelegraph/.test(name)) return 'Veículo especializado';
   if (/hacker news/.test(name)) return 'Comunidade de tecnologia';
   if (/google notícias/.test(name)) return 'Agregador de notícias';
   return 'Fonte externa';
