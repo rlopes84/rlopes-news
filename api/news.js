@@ -6,6 +6,10 @@ const MAX_ITEMS_PER_FEED = 18;
 const DIRECT_FEEDS = [
   { category: 'mercado', name: 'Agência Brasil', url: 'https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml' },
   { category: 'mercado', name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
+  { category: 'financas', name: 'CVM', url: 'https://www.cvm.gov.br/feed/decisoes.xml' },
+  { category: 'financas', name: 'CVM', url: 'https://www.cvm.gov.br/feed/legislacao.xml' },
+  { category: 'financas', name: 'CVM', url: 'https://www.cvm.gov.br/feed/audiencias.xml' },
+  { category: 'financas', name: 'CVM', url: 'https://www.cvm.gov.br/feed/informativos_colegiado.xml' },
   { category: 'tecnologia', name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml' },
   { category: 'tecnologia', name: 'TechCrunch', url: 'https://techcrunch.com/feed/' },
   { category: 'tecnologia', name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
@@ -18,6 +22,12 @@ const DIRECT_FEEDS = [
 const GOOGLE_NEWS_FEEDS = [
   { category: 'mercado', query: '(economia OR negócios OR sustentabilidade OR "economia circular" OR mercado) when:2d' },
   { category: 'financas', query: '(finanças OR consórcios OR crédito OR investimentos OR "renda fixa") when:2d' },
+  { category: 'financas', query: '("fundos de investimento" OR FIDC OR FII OR ETF OR multimercado OR "fundos de ações" OR "fundos de renda fixa" OR gestoras OR "gestão de recursos") when:2d' },
+  { category: 'financas', query: 'site:comdinheiro.com.br/noticias (fundos OR investimentos OR economia OR mercado OR commodities OR câmbio) when:2d' },
+  { category: 'financas', query: 'site:anbima.com.br/pt_br/imprensa (fundos OR economia OR mercado OR investimentos OR FIDC) when:2d' },
+  { category: 'financas', query: 'site:infomoney.com.br (fundos OR investimentos OR economia OR mercado financeiro OR FIIs) when:2d' },
+  { category: 'financas', query: '(PIB OR IPCA OR inflação OR Selic OR juros OR fiscal OR câmbio OR dólar OR "Banco Central" OR "economia brasileira") when:2d' },
+  { category: 'financas', query: 'site:gov.br/cvm (fundos OR gestoras OR FIDC OR FII OR "mercado de capitais") when:2d' },
   { category: 'cripto', query: '(Bitcoin OR criptomoedas OR blockchain OR criptoativos) when:2d' },
   { category: 'tecnologia', query: '(tecnologia OR inovação OR transformação digital OR cibersegurança) when:2d' },
   { category: 'agronews', query: '(agronegócio OR agricultura OR AgTech OR agroindústria OR commodities) when:2d' },
@@ -113,7 +123,8 @@ function classifySource(source = '') {
   const name = source.toLowerCase();
   if (/reuters|associated press|\\bap news\\b|afp/.test(name)) return 'Agência internacional';
   if (/cnn|bbc|bloomberg|financial times|cnbc|the guardian|al jazeera|france 24|deutsche welle/.test(name)) return 'Veículo internacional';
-  if (/agência brasil|valor econômico|estadao|estadão|folha|g1|exame|uol|infomoney/.test(name)) return 'Veículo nacional';
+  if (/cvm|anbima|banco central|ministério da fazenda|tesouro nacional/.test(name)) return 'Fonte institucional';
+  if (/comdinheiro|agência brasil|valor econômico|estadao|estadão|folha|g1|exame|uol|infomoney/.test(name)) return 'Veículo nacional';
   if (/techcrunch|the verge|ars technica|coindesk|cointelegraph/.test(name)) return 'Veículo especializado';
   if (/hacker news/.test(name)) return 'Comunidade de tecnologia';
   if (/google notícias/.test(name)) return 'Agregador de notícias';
@@ -241,7 +252,7 @@ module.exports = async function handler(req, res) {
 
   const sorted = [...unique.values()]
     .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 160);
+    .slice(0, 200);
   const successfulFeeds = results.filter(result => result.status === 'fulfilled').length;
   const failedFeeds = jobs.length - successfulFeeds;
   const sourceNames = [...new Set(sorted.map(item => item.source))];
