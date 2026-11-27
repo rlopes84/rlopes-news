@@ -1601,7 +1601,11 @@
             contentEl.innerHTML = verticalCats.map((cat, index) => {
                 const topStory = state.news.find(n => n.category === cat.id);
                 if (!topStory) return '';
-                const storyUrl = /^https?:\\/\\//i.test(String(topStory.url || '')) ? String(topStory.url) : '';
+                let storyUrl = '';
+                try {
+                    const parsedStoryUrl = new URL(String(topStory.url || ''));
+                    if (parsedStoryUrl.protocol === 'http:' || parsedStoryUrl.protocol === 'https:') storyUrl = parsedStoryUrl.href;
+                } catch (_) {}
                 const storyTitle = escapeRlopesHtml(topStory.title || 'Notícia');
                 const storySource = escapeRlopesHtml(topStory.source || 'Fonte não informada');
                 const storyInsight = escapeRlopesHtml(topStory.insight || topStory.summary || 'Resumo indisponível.');
@@ -1644,7 +1648,10 @@
                     lines.push(`${idx + 1}. [${cat.short.toUpperCase()}]`);
                     lines.push(`• ${topStory.title}`);
                     lines.push(`  Insight: ${topStory.insight || topStory.summary}`);
-                    if (/^https?:\\/\\//i.test(String(topStory.url || ''))) lines.push(`  Notícia completa: ${topStory.url}`);
+                    try {
+                        const parsedStoryUrl = new URL(String(topStory.url || ''));
+                        if (parsedStoryUrl.protocol === 'http:' || parsedStoryUrl.protocol === 'https:') lines.push(`  Notícia completa: ${parsedStoryUrl.href}`);
+                    } catch (_) {}
                     lines.push('');
                 }
             });
