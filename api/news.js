@@ -30,13 +30,27 @@ const GOOGLE_NEWS_FEEDS = [
 ];
 
 function decodeXml(value = '') {
-  return String(value)
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([\da-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  let text = String(value).replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1');
+  const named = {
+    nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>',
+    ndash: '–', mdash: '—', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“',
+    hellip: '…', copy: '©', reg: '®'
+  };
+  for (let pass = 0; pass < 3; pass++) {
+    const decoded = text
+      .replace(/&#(\\d+);/g, (_, n) => {
+        const code = Number(n);
+        return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
+      })
+      .replace(/&#x([\\da-f]+);/gi, (_, n) => {
+        const code = parseInt(n, 16);
+        return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
+      })
+      .replace(/&([a-z][a-z0-9]+);/gi, (entity, name) => named[name.toLowerCase()] ?? entity);
+    if (decoded === text) break;
+    text = decoded;
+  }
+  return text.replace(/[\\u00a0\\u2007\\u202f]/g, ' ');
 }
 
 function cleanText(value = '') {
