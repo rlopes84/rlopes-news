@@ -1601,17 +1601,33 @@
             contentEl.innerHTML = verticalCats.map((cat, index) => {
                 const topStory = state.news.find(n => n.category === cat.id);
                 if (!topStory) return '';
+                let storyUrl = '';
+                try {
+                    const parsedStoryUrl = new URL(String(topStory.url || ''));
+                    if (parsedStoryUrl.protocol === 'http:' || parsedStoryUrl.protocol === 'https:') storyUrl = parsedStoryUrl.href;
+                } catch (_) {}
+                const storyTitle = escapeRlopesHtml(topStory.title || 'Notícia');
+                const storySource = escapeRlopesHtml(topStory.source || 'Fonte não informada');
+                const storyInsight = escapeRlopesHtml(topStory.insight || topStory.summary || 'Resumo indisponível.');
                 return `
-                    <div class="p-4 rounded-xl bg-slate-50 dark:bg-terminal-card border border-slate-200 dark:border-slate-800">
+                    <article class="p-4 rounded-xl bg-slate-50 dark:bg-terminal-card border border-slate-200 dark:border-slate-800">
                         <div class="flex items-center justify-between gap-2 mb-1">
                             <span class="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400 uppercase">
-                                ${index + 1}. ${cat.label}
+                                ${index + 1}. ${escapeRlopesHtml(cat.label)}
                             </span>
-                            <span class="text-[10px] font-mono text-slate-400">${topStory.source}</span>
+                            <span class="text-[10px] font-mono text-slate-400">${storySource}</span>
                         </div>
-                        <h4 class="font-bold text-sm text-slate-900 dark:text-white mb-1">${topStory.title}</h4>
-                        <p class="text-xs text-slate-600 dark:text-slate-300">${topStory.insight || topStory.summary}</p>
-                    </div>
+                        <h4 class="font-bold text-sm text-slate-900 dark:text-white mb-1">${storyTitle}</h4>
+                        <p class="text-xs text-slate-600 dark:text-slate-300 mb-3">${storyInsight}</p>
+                        ${storyUrl ? `
+                            <a href="${escapeRlopesHtml(storyUrl)}" target="_blank" rel="noopener noreferrer"
+                               aria-label="Ler notícia completa: ${storyTitle}"
+                               class="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300">
+                                <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
+                                Ler notícia completa
+                            </a>
+                        ` : '<span class="text-[11px] text-slate-400">Link da matéria original indisponível.</span>'}
+                    </article>
                 `;
             }).join('');
 
@@ -1632,6 +1648,10 @@
                     lines.push(`${idx + 1}. [${cat.short.toUpperCase()}]`);
                     lines.push(`• ${topStory.title}`);
                     lines.push(`  Insight: ${topStory.insight || topStory.summary}`);
+                    try {
+                        const parsedStoryUrl = new URL(String(topStory.url || ''));
+                        if (parsedStoryUrl.protocol === 'http:' || parsedStoryUrl.protocol === 'https:') lines.push(`  Notícia completa: ${parsedStoryUrl.href}`);
+                    } catch (_) {}
                     lines.push('');
                 }
             });
