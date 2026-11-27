@@ -30,7 +30,7 @@ const GOOGLE_NEWS_FEEDS = [
 ];
 
 function decodeXml(value = '') {
-  let text = String(value).replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1');
+  let text = String(value).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
   const named = {
     nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>',
     ndash: '–', mdash: '—', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“',
@@ -38,11 +38,11 @@ function decodeXml(value = '') {
   };
   for (let pass = 0; pass < 3; pass++) {
     const decoded = text
-      .replace(/&#(\\d+);/g, (_, n) => {
+      .replace(/&#(\d+);/g, (_, n) => {
         const code = Number(n);
         return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
       })
-      .replace(/&#x([\\da-f]+);/gi, (_, n) => {
+      .replace(/&#x([\da-f]+);/gi, (_, n) => {
         const code = parseInt(n, 16);
         return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
       })
@@ -50,7 +50,7 @@ function decodeXml(value = '') {
     if (decoded === text) break;
     text = decoded;
   }
-  return text.replace(/[\\u00a0\\u2007\\u202f]/g, ' ');
+  return text.replace(/[\u00a0\u2007\u202f]/g, ' ');
 }
 
 function cleanText(value = '') {
