@@ -82,7 +82,7 @@ function parseTimestamp(item) {
 
 function canonicalUrl(value = '') {
   const url = decodeXml(value).trim();
-  if (!/^https?:\\/\\//i.test(url)) return '';
+  if (!(url.startsWith('http://') || url.startsWith('https://'))) return '';
   return url
     .replace(/#.*$/, '')
     .replace(/([?&])(?:utm_[^=&]+|fbclid|gclid)=[^&]*/gi, '$1')
